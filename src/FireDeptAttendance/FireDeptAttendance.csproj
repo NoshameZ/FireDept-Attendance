@@ -12,7 +12,7 @@
     <Product>Fire Department Attendance Tracker</Product>
     <Company>Fire Department</Company>
     <!-- Overridden by CI from the git tag:  dotnet publish -p:Version=2.0.1 -->
-    <Version>2.0.2</Version>
+    <Version>2.0.3</Version>
     <!-- Overridden by CI with https://github.com/<owner>/<repo> -->
     <UpdateRepoUrl Condition="'$(UpdateRepoUrl)' == ''">https://github.com/NoshameZ/FireDept-Attendance</UpdateRepoUrl>
     <ApplicationIcon>app.ico</ApplicationIcon>

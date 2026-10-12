@@ -18,14 +18,39 @@ public sealed class QuarterMinutesSummary
     public List<string> Files { get; } = new();
 }
 
+/// <summary>
+/// Page geometry and typography of exported minutes. The on-screen page view (PageEditor) uses the same
+/// numbers so what you type looks like the exported Word document.
+/// </summary>
+public static class MinutesPageLayout
+{
+    public const int TwipsPerInch = 1440;
+    public const int PageWidthTwips = 12240;    // 8.5in (US Letter)
+    public const int PageHeightTwips = 15840;   // 11in
+    public const int MarginTwips = 1440;        // 1in on all four sides
+    public const int HeaderDistanceTwips = 720;
+    public const int FooterDistanceTwips = 720;
+    public const string FontName = "Calibri";
+    public const int BasePt = 11;
+    public const int SpacingAfterTwips = 0;
+    public const int LineTwips = 240;           // "single" line spacing (LineRule = Auto)
+    public const double SignatureWidthInches = 2.0;
+
+    public static double PageWidthInches => PageWidthTwips / (double)TwipsPerInch;
+    public static double PageHeightInches => PageHeightTwips / (double)TwipsPerInch;
+    public static double MarginInches => MarginTwips / (double)TwipsPerInch;
+    public static double ContentWidthInches => PageWidthInches - 2 * MarginInches;
+    public static double ContentHeightInches => PageHeightInches - 2 * MarginInches;
+}
+
 /// <summary>Meeting-minutes export to Word (.docx) — port of <c>docx_export.py</c>.</summary>
 public static class DocxExporter
 {
-    private const double SigWidthInches = 2.0;
+    private const double SigWidthInches = MinutesPageLayout.SignatureWidthInches;
     private const long EmuPerInch = 914400;
 
     public static void ExportMinutes(string path, List<List<RichRun>> header, List<List<RichRun>> body,
-                                     List<List<RichRun>> footer, string? signaturePath = null, int basePt = 11)
+                                     List<List<RichRun>> footer, string? signaturePath = null, int basePt = MinutesPageLayout.BasePt)
     {
         var sig = !string.IsNullOrEmpty(signaturePath) && File.Exists(signaturePath) ? signaturePath : null;
         using var doc = WordprocessingDocument.Create(path, WordprocessingDocumentType.Document);
@@ -44,9 +69,14 @@ public static class DocxExporter
             var drawing = ctx.Picture();
             if (drawing != null) bodyEl.Append(new Paragraph(new Run(drawing)));
         }
+        const int m = MinutesPageLayout.MarginTwips;
         bodyEl.Append(new SectionProperties(
-            new PageSize { Width = 12240, Height = 15840 },
-            new PageMargin { Top = 1440, Right = 1440, Bottom = 1440, Left = 1440, Header = 720, Footer = 720, Gutter = 0 }));
+            new PageSize { Width = MinutesPageLayout.PageWidthTwips, Height = MinutesPageLayout.PageHeightTwips },
+            new PageMargin
+            {
+                Top = m, Right = m, Bottom = m, Left = m, Gutter = 0,
+                Header = MinutesPageLayout.HeaderDistanceTwips, Footer = MinutesPageLayout.FooterDistanceTwips,
+            }));
         main.Document.Save();
     }
 
@@ -56,10 +86,19 @@ public static class DocxExporter
         sp.Styles = new Styles(
             new DocDefaults(
                 new RunPropertiesDefault(new RunPropertiesBaseStyle(
-                    new RunFonts { Ascii = "Calibri", HighAnsi = "Calibri", ComplexScript = "Calibri", EastAsia = "Calibri" },
-                    new FontSize { Val = "22" }, new FontSizeComplexScript { Val = "22" })),
+                    new RunFonts
+                    {
+                        Ascii = MinutesPageLayout.FontName, HighAnsi = MinutesPageLayout.FontName,
+                        ComplexScript = MinutesPageLayout.FontName, EastAsia = MinutesPageLayout.FontName,
+                    },
+                    new FontSize { Val = (MinutesPageLayout.BasePt * 2).ToString() },
+                    new FontSizeComplexScript { Val = (MinutesPageLayout.BasePt * 2).ToString() })),
                 new ParagraphPropertiesDefault(new ParagraphPropertiesBaseStyle(
-                    new SpacingBetweenLines { After = "0", Line = "240", LineRule = LineSpacingRuleValues.Auto }))),
+                    new SpacingBetweenLines
+                    {
+                        Before = "0", After = MinutesPageLayout.SpacingAfterTwips.ToString(),
+                        Line = MinutesPageLayout.LineTwips.ToString(), LineRule = LineSpacingRuleValues.Auto,
+                    }))),
             new Style(new StyleName { Val = "Normal" }, new PrimaryStyle())
             { Type = StyleValues.Paragraph, StyleId = "Normal", Default = true });
         sp.Styles.Save();

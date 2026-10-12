@@ -206,6 +206,56 @@ using (var wd = WordprocessingDocument.Open(tabDocx, false))
     Check(boldRun.RunProperties?.Bold != null && boldRun.Elements<DocumentFormat.OpenXml.Wordprocessing.TabChar>().Count() == 1,
         "tab stays inside its formatted run");
 }
+// ---- page layout shared by the exporter and the on-screen page view -----------------------
+Console.WriteLine("[Page layout]");
+Check(MinutesPageLayout.PageWidthInches == 8.5 && MinutesPageLayout.PageHeightInches == 11 &&
+      MinutesPageLayout.MarginInches == 1 && MinutesPageLayout.ContentWidthInches == 6.5 &&
+      MinutesPageLayout.ContentHeightInches == 9, "layout constants: Letter, 1in margins, 6.5x9in text area");
+void CheckLayout(string file, string what)
+{
+    using var wd = WordprocessingDocument.Open(file, false);
+    var main = wd.MainDocumentPart!;
+    var sect = main.Document.Body!.Elements<DocumentFormat.OpenXml.Wordprocessing.SectionProperties>().LastOrDefault();
+    var size = sect?.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.PageSize>();
+    var mar = sect?.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.PageMargin>();
+    Check(size != null && size.Width?.Value == MinutesPageLayout.PageWidthTwips && size.Height?.Value == MinutesPageLayout.PageHeightTwips,
+        $"{what}: page size matches layout");
+    Check(mar != null && mar.Top?.Value == MinutesPageLayout.MarginTwips && mar.Bottom?.Value == MinutesPageLayout.MarginTwips &&
+          mar.Left?.Value == MinutesPageLayout.MarginTwips && mar.Right?.Value == MinutesPageLayout.MarginTwips,
+        $"{what}: margins match layout");
+    var defaults = main.StyleDefinitionsPart!.Styles!.DocDefaults!;
+    var fonts = defaults.RunPropertiesDefault!.RunPropertiesBaseStyle!.RunFonts!;
+    var fsz = defaults.RunPropertiesDefault.RunPropertiesBaseStyle.FontSize!;
+    var spacing = defaults.ParagraphPropertiesDefault!.ParagraphPropertiesBaseStyle!.SpacingBetweenLines!;
+    Check(fonts.Ascii?.Value == MinutesPageLayout.FontName && fsz.Val?.Value == (MinutesPageLayout.BasePt * 2).ToString(),
+        $"{what}: default font {MinutesPageLayout.FontName} {MinutesPageLayout.BasePt}pt");
+    Check(spacing.After?.Value == "0" && spacing.Before?.Value == "0" && spacing.Line?.Value == "240",
+        $"{what}: single spacing, no paragraph gaps");
+    var runSizes = main.Document.Body.Descendants<DocumentFormat.OpenXml.Wordprocessing.FontSize>().Select(f => f.Val?.Value).Distinct().ToList();
+    Check(runSizes.All(v => v == "22"), $"{what}: every run is 11pt");
+}
+CheckLayout(tabDocx, "single export");
+CheckLayout(docx, "export with signature");
+using (var wd = WordprocessingDocument.Open(docx, false))
+{
+    var ext = wd.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Drawing.Wordprocessing.Extent>().First();
+    Check(ext.Cx?.Value == (long)(MinutesPageLayout.SignatureWidthInches * 914400), "signature exported 2in wide (same as page view)");
+}
+// Header + body + footer appear in export order as consecutive paragraphs (what the page view stacks).
+var orderDocx = Path.Combine(work, "order.docx");
+DocxExporter.ExportMinutes(orderDocx,
+    new() { new() { new RichRun { Text = "HEAD" } } },
+    new() { new() { new RichRun { Text = "BODY1" } }, new(), new() { new RichRun { Text = "BODY2" } } },
+    new() { new() { new RichRun { Text = "FOOT" } } });
+using (var wd = WordprocessingDocument.Open(orderDocx, false))
+{
+    var paras = wd.MainDocumentPart!.Document.Body!.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>().Select(p => p.InnerText).ToList();
+    Check(string.Join("|", paras) == "HEAD|BODY1||BODY2|FOOT", $"export order header→body→footer, one paragraph per line ({string.Join("|", paras)})");
+}
+var orderBatchDir = Path.Combine(work, "layoutbatch");
+var layoutSummary = DocxExporter.ExportQuarterMinutes(db, q1, orderBatchDir, s.MinutesHeader, s.MinutesFooter, null);
+CheckLayout(Directory.GetFiles(layoutSummary.Folder, "*.docx").First(), "batch export");
+
 var tabEvent = meet;
 var savedMinutes = db.GetEventMinutes(tabEvent);
 db.SaveEventMinutes(tabEvent, tabEnc);

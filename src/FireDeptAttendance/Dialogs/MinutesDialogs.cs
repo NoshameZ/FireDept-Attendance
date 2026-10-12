@@ -32,6 +32,10 @@ internal static class DialogLayout
     public static double FitHeight(double preferred) =>
         Math.Max(360, Math.Min(preferred, SystemParameters.WorkArea.Height - 40));
 
+    /// <summary>Preferred dialog width, capped to the screen's work area.</summary>
+    public static double FitWidth(double preferred) =>
+        Math.Max(480, Math.Min(preferred, SystemParameters.WorkArea.Width - 40));
+
     public static TextBlock Bold(string text, bool wrap = false)
     {
         var t = Ui.Text(text, Lbl.Normal, wrap);
@@ -40,18 +44,22 @@ internal static class DialogLayout
     }
 }
 
-/// <summary>Edit the header/footer templates (rich text + signature image) that wrap every meeting's minutes.</summary>
+/// <summary>
+/// Edit the header/footer templates (rich text + signature image) that wrap every meeting's minutes, right on a
+/// Word-like page: header and footer are typed in place, with grayed sample minutes in between.
+/// </summary>
 public sealed class MinutesTemplateDialog : Window
 {
     private readonly AppSettings _s = App.Settings;
-    private readonly RichTextEditor _header, _footer;
+    private readonly PageEditor _page;
+    private readonly RichBoxCore _header, _footer;
     private readonly TextBlock _sigLbl = Ui.Text("", Lbl.Sub);
     private readonly Button _sigRemove;
 
     public MinutesTemplateDialog(Window? owner)
     {
-        Ui.SetupDialog(this, "Minutes Header / Footer", owner, 640, DialogLayout.FitHeight(780));
-        MinWidth = 560; MinHeight = Math.Min(560, Height);
+        Ui.SetupDialog(this, "Minutes Header / Footer", owner, DialogLayout.FitWidth(1000), DialogLayout.FitHeight(940));
+        MinWidth = Math.Min(640, Width); MinHeight = Math.Min(560, Height);
         var (root, btns) = DialogLayout.Make();
         DialogLayout.Add(btns, Ui.Button("Restore Defaults", RestoreDefaults, "GhostButton"), Dock.Left);
         DialogLayout.Add(btns, Ui.Button("Save", Save, "AccentButton"), Dock.Right);
@@ -65,26 +73,30 @@ public sealed class MinutesTemplateDialog : Window
             g.Children.Add(e);
         }
         Row(Ui.M(Ui.Text("Minutes Header / Footer", Lbl.Header), 0, 0, 0, 2));
-        Row(Ui.M(Ui.Text("These wrap the minutes you type for each meeting. You can format the text (B / I / U), and " +
-                         "these placeholders fill in automatically:", Lbl.Sub, true), 0, 0, 0, 4));
+        Row(Ui.M(Ui.Text("Type the header and footer right on the page — it looks like the exported Word document. " +
+                         "They wrap the minutes you type for each meeting (the gray text in the middle is only a sample). " +
+                         "Format text with B / I / U; these placeholders fill in automatically:", Lbl.Sub, true), 0, 0, 0, 4));
         var ph = Ui.Text("{attendees} = members present    {date} = meeting date    {location} = location", Lbl.Sub, true);
         ph.FontStyle = FontStyles.Italic;
-        Row(Ui.M(ph, 0, 0, 0, 12));
+        Row(Ui.M(ph, 0, 0, 0, 10));
 
-        Row(DialogLayout.Bold("Header (appears above the minutes):"));
-        _header = new RichTextEditor(10, 6, spell: true, minLines: 3);
-        Row(Ui.M(_header, 0, 3, 0, 12), true);
-        _header.SetContent(_s.MinutesHeader);
-
-        Row(DialogLayout.Bold("Footer (appears below the minutes) — click “Insert signature”, then drag it onto the signature line:", true));
         var sig = _s.SignaturePath();
-        _footer = new RichTextEditor(10, 6, allowSignature: true, signaturePath: sig.Length > 0 ? sig : null, spell: true, minLines: 3);
-        Row(Ui.M(_footer, 0, 3, 0, 12), true);
-        _footer.SetContent(_s.MinutesFooter);
+        _page = new PageEditor(sig.Length > 0 ? sig : null, spell: true);
+        _header = _page.AddRegion("Header", "Header — appears above the minutes on every meeting's export. Click to edit.",
+                                  RichTextModel.Parse(_s.MinutesHeader), PageRegionKind.Editable);
+        _page.AddSample("Minutes", "Sample only — each meeting's own minutes go here. Not saved.",
+                        "The minutes you type for each meeting appear here, between the header and the footer.",
+                        "",
+                        "(This gray text is only a sample and is not saved or exported.)",
+                        "");
+        _footer = _page.AddRegion("Footer", "Footer — appears below the minutes. Use “Insert signature”, then drag the " +
+                                  "signature onto the signature line.",
+                                  RichTextModel.Parse(_s.MinutesFooter), PageRegionKind.Editable, allowSignature: true);
+        Row(Ui.M(_page, 0, 0, 0, 10), true);
 
         var sp = new StackPanel();
-        sp.Children.Add(Ui.M(Ui.Text("Upload a signature image, then use “Insert signature” in the footer above and drag it " +
-                                     "onto the signature line. Its position is saved and used on every exported meeting's minutes.",
+        sp.Children.Add(Ui.M(Ui.Text("Upload a signature image, then use “Insert signature” above and drag it onto the " +
+                                     "signature line in the footer. Its position is saved and used on every exported meeting's minutes.",
                                      Lbl.Sub, true), 0, 0, 0, 6));
         var sr = new StackPanel { Orientation = Orientation.Horizontal };
         sr.Children.Add(Ui.M(_sigLbl, 0, 0, 10, 0));
@@ -93,12 +105,13 @@ public sealed class MinutesTemplateDialog : Window
         sr.Children.Add(_sigRemove);
         sp.Children.Add(sr);
         var grp = Ui.Group("Signature Image", sp);
-        grp.Margin = new Thickness(0, 2, 0, 8);
+        grp.Margin = new Thickness(0, 0, 0, 4);
         Row(grp);
         RefreshSigLabel();
 
         root.Children.Add(g);
         Content = root;
+        Loaded += (_, _) => _page.FocusRegion(_header);
     }
 
     private void RefreshSigLabel()
@@ -129,7 +142,7 @@ public sealed class MinutesTemplateDialog : Window
             Ui.Error("Signature", "Could not use that image file.");
             return;
         }
-        _footer.SetSignaturePath(stored);
+        _page.SetSignaturePath(stored);
         RefreshSigLabel();
     }
 
@@ -137,7 +150,8 @@ public sealed class MinutesTemplateDialog : Window
     {
         _s.ClearSignature();
         _footer.RemoveSignature();
-        _footer.SetSignaturePath("");
+        _header.RemoveSignature();
+        _page.SetSignaturePath("");
         RefreshSigLabel();
     }
 
@@ -156,7 +170,11 @@ public sealed class MinutesTemplateDialog : Window
     }
 }
 
-/// <summary>Write / edit one meeting's minutes, with formatted header/footer previews and Word / text export.</summary>
+/// <summary>
+/// Write / edit one meeting's minutes on a Word-like page: the header and footer from Settings (placeholders
+/// filled in, signature shown) sit above and below the minutes exactly as they will be exported.
+/// Save stores the minutes; Export writes Word (.docx) or text.
+/// </summary>
 public sealed class MinutesDialog : Window
 {
     private readonly Database _db = App.Db;
@@ -164,12 +182,13 @@ public sealed class MinutesDialog : Window
     private readonly long _eventId;
     private readonly long _attendees;
     private readonly string _dateIso, _location;
-    private readonly RichTextEditor _editor;
+    private readonly PageEditor _page;
+    private readonly RichBoxCore _editor;
 
     public MinutesDialog(Window? owner, Event ev)
     {
-        Ui.SetupDialog(this, "Meeting Minutes", owner, 760, DialogLayout.FitHeight(800));
-        MinWidth = 560; MinHeight = Math.Min(480, Height);
+        Ui.SetupDialog(this, "Meeting Minutes", owner, DialogLayout.FitWidth(1000), DialogLayout.FitHeight(980));
+        MinWidth = Math.Min(600, Width); MinHeight = Math.Min(480, Height);
         _eventId = ev.Id;
         _attendees = _db.CountEventAttendees(ev.Id);
         _dateIso = ev.EventDate ?? "";
@@ -191,36 +210,28 @@ public sealed class MinutesDialog : Window
         var subtitle = "Meeting on " + (_dateIso.Length > 0 ? DateUtil.IsoToUs(_dateIso) : "");
         if (_location.Length > 0) subtitle += $"  •  {_location}";
         subtitle += $"  •  {_attendees} in attendance";
-        Row(Ui.M(Ui.Text(subtitle, Lbl.Sub), 0, 0, 0, 12));
+        Row(Ui.M(Ui.Text(subtitle, Lbl.Sub), 0, 0, 0, 2));
+        Row(Ui.M(Ui.Text("Type the minutes on the page between the header and footer — this is how the Word export will look. " +
+                         "Ctrl+B / Ctrl+I / Ctrl+U format text; Tab inserts a tab, Shift+Tab removes one. " +
+                         "The header and footer are edited in Settings → Minutes Header / Footer.", Lbl.Sub, true), 0, 0, 0, 10));
 
         var sig = _s.SignaturePath();
-        var head = Subst(_s.MinutesHeader);
-        if (!RichTextModel.IsEmpty(RichTextModel.Encode(head)))
-        {
-            Row(Ui.Text("Header preview:", Lbl.Sub));
-            var hp = new RichTextEditor(9, 4, readOnly: true, spell: false);
-            hp.SetContent(RichTextModel.Encode(head));
-            Row(Ui.M(hp, 0, 2, 0, 8));
-        }
-
-        Row(DialogLayout.Bold("Minutes:  (select text, then B / I / U — or Ctrl+B / Ctrl+I / Ctrl+U; Tab inserts a tab, Shift+Tab removes one)", true));
-        // The body takes all remaining height (star row) and scrolls inside it.
-        _editor = new RichTextEditor(11, 14, spell: true, minLines: 4);
-        _editor.SetContent(_db.GetEventMinutes(_eventId));
-        Row(Ui.M(_editor, 0, 3, 0, 8), true);
-
+        _page = new PageEditor(sig.Length > 0 ? sig : null, spell: true);
+        _page.AddRegion("Header", "Header from Settings → Minutes Header / Footer (placeholders filled in). Not editable here.",
+                        Subst(_s.MinutesHeader), PageRegionKind.ReadOnly);
+        _editor = _page.AddRegion("Minutes", "This meeting's minutes — type here.",
+                                  RichTextModel.Parse(_db.GetEventMinutes(_eventId)), PageRegionKind.Editable);
         var foot = Subst(_s.MinutesFooter);
-        if (!RichTextModel.IsEmpty(RichTextModel.Encode(foot)) || RichTextModel.HasSignature(_s.MinutesFooter))
-        {
-            Row(Ui.Text("Footer preview (with signature):", Lbl.Sub));
-            var fp = new RichTextEditor(9, 4, readOnly: true, signaturePath: sig.Length > 0 ? sig : null, spell: false);
-            fp.SetContent(RichTextModel.Encode(foot));
-            Row(Ui.M(fp, 0, 2, 0, 10));
-        }
+        // The export adds the signature at the very end when the footer doesn't place it; show it the same way.
+        if (sig.Length > 0 && !RichTextModel.HasSignature(_s.MinutesFooter) && !RichTextModel.HasSignature(_s.MinutesHeader))
+            foot.Add(new List<RichRun> { new() { IsImage = true } });
+        _page.AddRegion("Footer", "Footer from Settings → Minutes Header / Footer (with signature). Not editable here.",
+                        foot, PageRegionKind.ReadOnly);
+        Row(_page, true);
 
         root.Children.Add(g);
         Content = root;
-        Loaded += (_, _) => _editor.Box.Focus();
+        Loaded += (_, _) => _page.FocusRegion(_editor);
     }
 
     private List<List<RichRun>> Subst(string tmpl) =>

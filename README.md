@@ -95,6 +95,17 @@ Other options:
 
 ## Changelog
 
+### v2.0.3
+- **Word-like page view for meeting minutes.** You type the minutes on a white US-Letter page that matches the Word export: 8.5 × 11 in, 1 in margins, Calibri 11 pt, single spacing, no gaps between paragraphs, signature 2 in wide.
+  - The header and footer from Settings appear above and below the minutes, in export order, with placeholders filled in and the signature shown. Dashed separators with **Header / Minutes / Footer** tags mark each area.
+  - A ribbon has **B / I / U**, **Insert signature**, **Spell check** and **Zoom** (50–200 % or *Page width*; Ctrl + mouse wheel also zooms).
+  - Dashed red markers show where a new page starts, and the ribbon shows the approximate page count.
+  - Clicking anywhere on the page places the cursor in the nearest editable area.
+- **Settings → Minutes Header / Footer** uses the same page view. You edit the header and footer in place, with grayed sample minutes in between.
+- Pasted text loses fonts, sizes and colours that the export can't keep (bold / italic / underline stay), so the page matches the export.
+- The exporter now takes its page size, margins, font and spacing from one shared layout definition, which the page view also uses.
+- No change to how minutes are stored (`rich-v1`). Existing minutes, headers and footers load unchanged.
+
 ### v2.0.2
 - **Meeting minutes editor:**
   - **Tab** now inserts a tab character in the minutes body, replacing any selected text, instead of jumping to the next control.
