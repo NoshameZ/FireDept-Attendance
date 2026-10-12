@@ -17,6 +17,7 @@ public sealed class SettingsDialog : Window
     private readonly List<RadioButton> _fonts = new();
     private readonly WrapPanel _swatches = new();
     private bool _syncing;
+    private readonly TextBlock _dataPath = Ui.Text("", Lbl.Small);
 
     public SettingsDialog(MainWindow app)
     {
@@ -71,7 +72,27 @@ public sealed class SettingsDialog : Window
         min.Children.Add(minBtn);
         sp.Children.Add(Ui.Group("Meeting Minutes", min));
 
-        root.Children.Add(sp);
+        var data = new StackPanel();
+        data.Children.Add(Ui.M(Ui.Text("Data folder, importing a previous fire_dept.db, restoring backups, default export " +
+                                       "folders and the install location.", Lbl.Sub, true), 0, 0, 0, 4));
+        _dataPath.TextWrapping = TextWrapping.Wrap;
+        data.Children.Add(Ui.M(_dataPath, 0, 0, 0, 8));
+        var dataBtns = new WrapPanel();
+        dataBtns.Children.Add(Ui.M(Ui.Button("💾  Data & Storage…", () =>
+        {
+            new DataDialog(this).ShowDialog();
+            SyncControls();
+        }, "GhostButton"), 0, 0, 8, 0));
+        dataBtns.Children.Add(Ui.Button("📥  Import from database…", () =>
+        {
+            DataActions.ImportFromDatabase(this);
+            SyncControls();
+        }, "GhostButton"));
+        data.Children.Add(dataBtns);
+        sp.Children.Add(Ui.Group("Data & Storage", data));
+
+        root.Children.Add(new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = sp });
+        MaxHeight = SystemParameters.WorkArea.Height - 40;
         Content = root;
         SyncControls();
     }
@@ -83,6 +104,7 @@ public sealed class SettingsDialog : Window
         _dark.IsChecked = S.Theme == "dark";
         foreach (var rb in _fonts) rb.IsChecked = (string)rb.Tag == S.FontSize;
         RenderSwatches();
+        _dataPath.Text = $"Data folder: {AppPaths.DataDir}";
         _syncing = false;
     }
 

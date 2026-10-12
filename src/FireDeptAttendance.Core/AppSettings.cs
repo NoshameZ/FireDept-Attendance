@@ -35,6 +35,27 @@ public sealed class AppSettings
     public string Signature { get; set; } = "";
     public List<string> UserWords { get; set; } = new();
 
+    // Folder preferences (stored under "paths"; kept by ResetToDefaults and by imports).
+    public string LastImportFile { get; set; } = "";
+    public string ExportExcelDir { get; set; } = "";
+    public string ExportMinutesDir { get; set; } = "";
+    public string ExportSingleMinutesDir { get; set; } = "";
+    /// <summary>User chose "Start empty" at the first-run import prompt; don't ask again.</summary>
+    public bool SkipImportPrompt { get; set; }
+
+    public string LastImportDir =>
+        string.IsNullOrEmpty(LastImportFile) ? "" : Path.GetDirectoryName(LastImportFile) ?? "";
+
+    public static string DocumentsDir => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+
+    /// <summary>A configured folder if it still exists, else Documents.</summary>
+    public static string ResolveDir(string? configured)
+    {
+        if (!string.IsNullOrWhiteSpace(configured) && Directory.Exists(configured)) return configured!;
+        var docs = DocumentsDir;
+        return string.IsNullOrEmpty(docs) ? Environment.CurrentDirectory : docs;
+    }
+
     /// <summary>Top-level keys we do not manage, preserved on save.</summary>
     private JsonObject _extra = new();
 
@@ -106,13 +127,22 @@ public sealed class AppSettings
                     if (w is JsonValue wv && wv.TryGetValue<string>(out var ws)) s.UserWords.Add(ws);
         }
 
+        if (root["paths"] is JsonObject pa)
+        {
+            s.LastImportFile = GetStr(pa, "last_import_file") ?? "";
+            s.ExportExcelDir = GetStr(pa, "export_excel_dir") ?? "";
+            s.ExportMinutesDir = GetStr(pa, "export_minutes_dir") ?? "";
+            s.ExportSingleMinutesDir = GetStr(pa, "export_single_minutes_dir") ?? "";
+            s.SkipImportPrompt = pa["skip_import_prompt"] is JsonValue sk && sk.TryGetValue<bool>(out var b) && b;
+        }
+
         foreach (var (k, v) in root)
             if (!Known.Contains(k)) s._extra[k] = v?.DeepClone();
         return s;
     }
 
     private static readonly HashSet<string> Known =
-        new() { "theme", "accent", "font_size", "font_family", "rates", "defaults", "minutes" };
+        new() { "theme", "accent", "font_size", "font_family", "rates", "defaults", "minutes", "paths" };
 
     private static double ReadRate(JsonObject o, string key)
     {
@@ -153,6 +183,14 @@ public sealed class AppSettings
                 ["signature"] = Signature,
                 ["user_words"] = new JsonArray(UserWords.Select(w => (JsonNode?)w).ToArray()),
             },
+            ["paths"] = new JsonObject
+            {
+                ["last_import_file"] = LastImportFile,
+                ["export_excel_dir"] = ExportExcelDir,
+                ["export_minutes_dir"] = ExportMinutesDir,
+                ["export_single_minutes_dir"] = ExportSingleMinutesDir,
+                ["skip_import_prompt"] = SkipImportPrompt,
+            },
         };
         foreach (var (k, v) in _extra) root[k] = v?.DeepClone();
         return root;
@@ -177,7 +215,7 @@ public sealed class AppSettings
         catch (Exception) { return false; }
     }
 
-    /// <summary>Reset appearance + everything else to factory defaults (keeps directory).</summary>
+    /// <summary>Reset appearance + everything else to factory defaults (keeps directory and folder preferences).</summary>
     public void ResetToDefaults()
     {
         var dir = _directory;

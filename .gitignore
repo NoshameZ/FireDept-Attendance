@@ -5,6 +5,8 @@
 *.db-shm
 settings.json
 signature.*
+location.json
+backups/
 
 # Build output
 bin/

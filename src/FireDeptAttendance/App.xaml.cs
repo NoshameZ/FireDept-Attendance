@@ -2,8 +2,8 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using FireDeptAttendance.Core;
+using FireDeptAttendance.Dialogs;
 using FireDeptAttendance.Services;
-using Microsoft.Win32;
 
 namespace FireDeptAttendance;
 
@@ -21,16 +21,27 @@ public partial class App : Application
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
         try
         {
-            Directory.CreateDirectory(AppPaths.DataDir);
-            // First run: copy fire_dept.db / settings.json / signature.* from next to the exe
-            // (or its parent folder, e.g. the Velopack install root) into %APPDATA%\FireDeptAttendance.
-            var exeDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
-            var parent = Path.GetDirectoryName(exeDir) ?? "";
-            AppPaths.MigrateLegacyData(exeDir, parent);
-            if (!File.Exists(AppPaths.DbPath)) OfferImport();
-
+            EnsureDataFolder();
+            // Load settings first so the theme applies to the first-run dialogs.
             Settings = AppSettings.Load(AppPaths.DataDir);
             ThemeManager.Apply(Settings);
+
+            // Look for the previous (Python) version's data BEFORE any database is created, so an
+            // empty fire_dept.db can never block the migration. Empty candidate DBs are skipped.
+            var exeDir = AppContext.BaseDirectory.TrimEnd('\\', '/');
+            AppPaths.MigrateLegacyData(AppPaths.LegacyCandidateDirs(exeDir).ToArray());
+            if (AppPaths.LastMigrationSource != null)
+            {
+                ReloadSettingsOnly();
+                Settings.LastImportFile = AppPaths.LastMigrationSource;
+                Settings.Save();
+            }
+
+            // Still no records? Ask (until the user explicitly chooses to start empty).
+            var current = File.Exists(AppPaths.DbPath) ? DataImport.Inspect(AppPaths.DbPath) : null;
+            if (!Settings.SkipImportPrompt && (current is null || (current.IsValid && current.IsEmpty)))
+                DataActions.FirstRunPrompt();
+
             Db = new Database(AppPaths.DbPath);
         }
         catch (Exception ex)
@@ -45,54 +56,66 @@ public partial class App : Application
         MainWindow = win;
         ShutdownMode = ShutdownMode.OnMainWindowClose;
         win.Show();
+        if (AppPaths.LastMigrationSource != null)
+            Ui.Info("Previous data imported",
+                $"Your data from the previous version was found and copied into:\n{AppPaths.DataDir}\n\n" +
+                $"Source: {AppPaths.LastMigrationSource}\n(The original file was not changed.)");
     }
 
     /// <summary>
-    /// No database in the data folder yet: offer to import one from the previous
-    /// (Python) version, so existing members, events and settings carry over.
+    /// Make sure the data folder is usable. A custom folder that has gone missing (e.g. an unplugged
+    /// USB drive) or became read-only offers to fall back to the default folder.
     /// </summary>
-    private static void OfferImport()
+    private static void EnsureDataFolder()
     {
-        var answer = MessageBox.Show(
-            "Welcome! No existing attendance data was found.\n\n" +
-            "If you used the previous version of this app, click Yes and select its fire_dept.db file " +
-            "to import your members, events and settings.\n\nClick No to start with an empty database.",
-            "Import existing data?", MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (answer != MessageBoxResult.Yes) return;
-        var dlg = new OpenFileDialog
-        {
-            Title = "Select your existing fire_dept.db",
-            Filter = "Attendance database (fire_dept.db)|fire_dept.db|SQLite database (*.db)|*.db|All files (*.*)|*.*",
-            FileName = AppPaths.DbFileName,
-        };
-        if (dlg.ShowDialog() != true) return;
+        var err = AppPaths.ValidateFolder(AppPaths.DataDir);
+        if (err == null) return;
+        if (AppPaths.IsEnvOverride || AppPaths.SamePath(AppPaths.DataDir, AppPaths.DefaultDataDir))
+            throw new IOException($"The data folder can't be used: {err}");
+        var ans = MessageBox.Show(
+            $"Your data folder is not available:\n{AppPaths.DataDir}\n\n{err}\n\n" +
+            "Click Yes to switch back to the default folder for now:\n" + AppPaths.DefaultDataDir +
+            "\n\nClick No to exit (e.g. to reconnect the drive and try again).",
+            "Data folder unavailable", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (ans != MessageBoxResult.Yes) throw new IOException($"The data folder is not available: {err}");
+        AppPaths.ChangeDataDir(null, DataMoveMode.UseExisting);
+    }
+
+    /// <summary>Close the open database (before replacing or moving its file).</summary>
+    public static void CloseData()
+    {
+        try { Db?.Dispose(); } catch { /* ignore */ }
+        DataImport.ReleaseFileHandles();
+    }
+
+    public static void ReloadSettingsOnly()
+    {
+        Settings = AppSettings.Load(AppPaths.DataDir);
+        ThemeManager.Apply(Settings);
+    }
+
+    /// <summary>
+    /// Re-resolve the data folder, reload settings + database (running migrations) and refresh every tab.
+    /// Returns false (after telling the user) if the database can't be opened.
+    /// </summary>
+    public static bool ReloadData()
+    {
         try
         {
-            var dir = Path.GetDirectoryName(dlg.FileName)!;
-            if (string.Equals(Path.GetFileName(dlg.FileName), AppPaths.DbFileName, StringComparison.OrdinalIgnoreCase))
-            {
-                AppPaths.MigrateLegacyData(dir);
-            }
-            else
-            {
-                File.Copy(dlg.FileName, AppPaths.DbPath, overwrite: false);
-                var s = Path.Combine(dir, AppSettings.FileName);
-                if (File.Exists(s)) File.Copy(s, Path.Combine(AppPaths.DataDir, AppSettings.FileName), false);
-                foreach (var sig in Directory.GetFiles(dir, "signature.*"))
-                {
-                    var dest = Path.Combine(AppPaths.DataDir, Path.GetFileName(sig));
-                    if (!File.Exists(dest)) File.Copy(sig, dest);
-                }
-            }
-            if (File.Exists(AppPaths.DbPath))
-                MessageBox.Show($"Your data was imported into:\n{AppPaths.DataDir}", "Import complete",
-                    MessageBoxButton.OK, MessageBoxImage.Information);
+            Directory.CreateDirectory(AppPaths.DataDir);
+            ReloadSettingsOnly();
+            Db = new Database(AppPaths.DbPath);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Could not import that file:\n{ex.Message}", "Import failed",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show($"Could not open the database:\n{ex.Message}\n\nData folder: {AppPaths.DataDir}\n\n" +
+                            "The app will close. Your backups are in the 'backups' folder inside the data folder.",
+                "Fire Dept Attendance", MessageBoxButton.OK, MessageBoxImage.Error);
+            Current.Shutdown(1);
+            return false;
         }
+        if (Current.MainWindow is MainWindow mw) mw.OnDataReloaded();
+        return true;
     }
 
     private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)

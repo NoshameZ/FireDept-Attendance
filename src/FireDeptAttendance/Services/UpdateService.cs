@@ -36,6 +36,30 @@ public static class UpdateService
 
     private static UpdateManager CreateManager() => new(new GithubSource(RepoUrl, null, false));
 
+    /// <summary>
+    /// Where the program files live and how it was deployed. For a Setup.exe install this is the
+    /// Velopack root (default %LocalAppData%\FireDeptAttendance, or the --installto folder); for the
+    /// Portable zip it is the extracted folder. Falls back to the exe folder for dev builds.
+    /// </summary>
+    public static (string Dir, string Kind) InstallInfo()
+    {
+        try
+        {
+            var mgr = CreateManager();
+            if (mgr.IsInstalled)
+            {
+                var loc = Velopack.Locators.VelopackLocator.IsCurrentSet
+                    ? Velopack.Locators.VelopackLocator.Current
+                    : Velopack.Locators.VelopackLocator.CreateDefaultForPlatform();
+                var root = loc.RootAppDir;
+                if (!string.IsNullOrEmpty(root))
+                    return (root, mgr.IsPortable ? "Portable (self-updating)" : "Installed with Setup.exe (self-updating)");
+            }
+        }
+        catch { /* not installed / locator unavailable */ }
+        return (AppContext.BaseDirectory.TrimEnd('\\', '/'), "Not installed (running a plain build — no auto-updates)");
+    }
+
     private static bool _busy;
 
     /// <summary>

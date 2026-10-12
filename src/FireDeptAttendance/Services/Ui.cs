@@ -109,17 +109,30 @@ public static class Ui
     public static T Also<T>(this T obj, Action<T> act) { act(obj); return obj; }
 
     // ---- message boxes ----
-    public static void Info(string title, string msg) =>
-        MessageBox.Show(Owner(), msg, title, MessageBoxButton.OK, MessageBoxImage.Information);
-    public static void Warn(string title, string msg) =>
-        MessageBox.Show(Owner(), msg, title, MessageBoxButton.OK, MessageBoxImage.Warning);
-    public static void Error(string title, string msg) =>
-        MessageBox.Show(Owner(), msg, title, MessageBoxButton.OK, MessageBoxImage.Error);
+    public static void Info(string title, string msg) => Show(msg, title, MessageBoxButton.OK, MessageBoxImage.Information);
+    public static void Warn(string title, string msg) => Show(msg, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+    public static void Error(string title, string msg) => Show(msg, title, MessageBoxButton.OK, MessageBoxImage.Error);
     public static bool Confirm(string title, string msg, MessageBoxImage icon = MessageBoxImage.Warning) =>
-        MessageBox.Show(Owner(), msg, title, MessageBoxButton.YesNo, icon) == MessageBoxResult.Yes;
+        Show(msg, title, MessageBoxButton.YesNo, icon) == MessageBoxResult.Yes;
 
-    private static Window Owner() =>
-        Application.Current.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive) ?? Application.Current.MainWindow;
+    private static MessageBoxResult Show(string msg, string title, MessageBoxButton b, MessageBoxImage i)
+    {
+        var owner = Owner();
+        return owner != null ? MessageBox.Show(owner, msg, title, b, i) : MessageBox.Show(msg, title, b, i);
+    }
+
+    /// <summary>
+    /// Active window, else the main window — but only if it is actually shown (at startup, before the
+    /// main window exists, WPF may point MainWindow at an already-closed first-run dialog).
+    /// </summary>
+    private static Window? Owner()
+    {
+        var app = Application.Current;
+        if (app == null) return null;
+        var active = app.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive && w.IsVisible);
+        if (active != null) return active;
+        return app.MainWindow is { IsVisible: true } mw ? mw : null;
+    }
 
     /// <summary>Common dialog window setup: theme-aware, Esc closes.</summary>
     public static void SetupDialog(Window w, string title, Window? owner, double width, double height, bool resizable = true)

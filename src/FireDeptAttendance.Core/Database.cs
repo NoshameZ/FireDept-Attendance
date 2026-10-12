@@ -37,6 +37,8 @@ public sealed class Database : IDisposable
     public Database(string dbPath)
     {
         DbPath = dbPath;
+        var parent = Path.GetDirectoryName(Path.GetFullPath(dbPath));
+        if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
         _conn = new SqliteConnection(new SqliteConnectionStringBuilder
         {
             DataSource = dbPath,

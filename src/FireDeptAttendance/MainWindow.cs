@@ -25,6 +25,7 @@ public sealed class MainWindow : Window
     private readonly Button _themeBtn;
     private readonly TabControl _tabs = new() { Margin = new Thickness(8) };
     private bool _syncing;
+    private readonly TextBlock _verText;
 
     public MembersTab MembersTab { get; }
     public AttendanceTab AttendanceTab { get; }
@@ -79,9 +80,15 @@ public sealed class MainWindow : Window
         upd.Padding = new Thickness(8, 2, 8, 2);
         DockPanel.SetDock(upd, Dock.Right);
         status.Children.Add(upd);
-        var ver = Ui.Text($"Version {UpdateService.CurrentVersion}   •   Data folder: {AppPaths.DataDir}", Lbl.Sub);
-        ver.TextTrimming = TextTrimming.CharacterEllipsis;
-        status.Children.Add(ver);
+        var data = Ui.Button("💾  Data & Storage", () => new DataDialog(this).ShowDialog(), "GhostButton");
+        data.Padding = new Thickness(8, 2, 8, 2);
+        data.Margin = new Thickness(0, 0, 8, 0);
+        DockPanel.SetDock(data, Dock.Right);
+        status.Children.Add(data);
+        _verText = Ui.Text("", Lbl.Sub);
+        _verText.TextTrimming = TextTrimming.CharacterEllipsis;
+        UpdateStatusText();
+        status.Children.Add(_verText);
         DockPanel.SetDock(status, Dock.Bottom);
         root.Children.Add(status);
 
@@ -147,6 +154,21 @@ public sealed class MainWindow : Window
         CurQuarter = quarter;
         QuarterId = Db.GetOrCreateQuarter(year, quarter);
         SyncToolbar();
+    }
+
+    private void UpdateStatusText()
+    {
+        _verText.Text = $"Version {UpdateService.CurrentVersion}   •   Data folder: {AppPaths.DataDir}";
+        _verText.ToolTip = AppPaths.DbPath;
+    }
+
+    /// <summary>Called by <see cref="App.ReloadData"/> after the database/settings were swapped.</summary>
+    public void OnDataReloaded()
+    {
+        QuarterId = Db.GetOrCreateQuarter(CurYear, CurQuarter);
+        UpdateStatusText();
+        UpdateThemeButton();
+        RefreshAll();
     }
 
     public void RefreshAll()

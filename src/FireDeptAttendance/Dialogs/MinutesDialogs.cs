@@ -240,9 +240,12 @@ public sealed class MinutesDialog : Window
             Title = "Export Minutes", DefaultExt = ".docx", AddExtension = true,
             FileName = $"minutes_{(_dateIso.Length > 0 ? _dateIso : "meeting")}.docx",
             Filter = "Word document (*.docx)|*.docx|Text file (*.txt)|*.txt|All files (*.*)|*.*",
+            InitialDirectory = AppSettings.ResolveDir(_s.ExportSingleMinutesDir),
         };
         if (dlg.ShowDialog(this) != true) return;
         var path = dlg.FileName;
+        _s.ExportSingleMinutesDir = Path.GetDirectoryName(path) ?? "";
+        _s.Save();
         var sig = _s.SignaturePath();
         try
         {

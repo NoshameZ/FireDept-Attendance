@@ -68,6 +68,19 @@ public sealed class ExportTab : UserControl, IRefreshable
         sp.Children.Add(Ui.M(_minBtn, 0, 14, 0, 14));
         sp.Children.Add(_minStatus);
 
+        sp.Children.Add(new Separator { Margin = new Thickness(0, 18, 0, 0) });
+        sp.Children.Add(Ui.M(Ui.Text("Data", Lbl.Header), 0, 14, 0, 0));
+        sp.Children.Add(Ui.M(Ui.Text(
+            "Import members, events and attendance from another fire_dept.db (for example the previous version of this app). " +
+            "You'll see a preview first, and your current data is backed up automatically. Data & Storage also lets you " +
+            "change where data and exports are saved.", Lbl.Sub, true), 0, 4, 0, 10));
+        var dataRow = new StackPanel { Orientation = Orientation.Horizontal };
+        dataRow.Children.Add(Ui.M(Ui.Button("📥 Import from database…",
+            () => Dialogs.DataActions.ImportFromDatabase(Window.GetWindow(this)), "AccentButton"), 0, 0, 8, 0));
+        dataRow.Children.Add(Ui.Button("💾 Data & Storage…",
+            () => new Dialogs.DataDialog(Window.GetWindow(this)).ShowDialog(), "GhostButton"));
+        sp.Children.Add(dataRow);
+
         Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = sp };
     }
 
@@ -91,9 +104,15 @@ public sealed class ExportTab : UserControl, IRefreshable
             Ui.Info("No meetings", $"There are no meetings in {label}, so there is nothing to export.");
             return;
         }
-        var dlg = new OpenFolderDialog { Title = "Choose a folder to save the minutes documents" };
+        var dlg = new OpenFolderDialog
+        {
+            Title = "Choose a folder to save the minutes documents",
+            InitialDirectory = AppSettings.ResolveDir(_app.Settings.ExportMinutesDir),
+        };
         if (dlg.ShowDialog(Window.GetWindow(this)) != true) return;
         var folder = dlg.FolderName;
+        _app.Settings.ExportMinutesDir = folder;
+        _app.Settings.Save();
         var header = _app.Settings.MinutesHeader;
         var footer = _app.Settings.MinutesFooter;
         var sig = _app.Settings.SignaturePath();
@@ -143,9 +162,12 @@ public sealed class ExportTab : UserControl, IRefreshable
         {
             Title = "Save Excel Report", DefaultExt = ".xlsx", FileName = name,
             Filter = "Excel Workbook (*.xlsx)|*.xlsx", AddExtension = true,
+            InitialDirectory = AppSettings.ResolveDir(_app.Settings.ExportExcelDir),
         };
         if (dlg.ShowDialog(Window.GetWindow(this)) != true) return;
         var path = dlg.FileName;
+        _app.Settings.ExportExcelDir = System.IO.Path.GetDirectoryName(path) ?? "";
+        _app.Settings.Save();
         var activeOnly = _activeOnly.IsChecked == true;
         var roster = _roster.IsChecked == true;
 

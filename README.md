@@ -13,7 +13,20 @@ Version 2 is a full rewrite of the original Python/tkinter app. It keeps every f
    - Windows SmartScreen may warn because the installer is not code-signed. Click **More info → Run anyway**.
 3. Start **Fire Department Attendance Tracker** from the Start menu.
 
-A portable zip (`FireDeptAttendance-win-Portable.zip`) is also attached to each release. It runs without installing, but only the **installed** copy updates itself automatically.
+### Install location
+
+- **Default:** `Setup.exe` is a one-click installer with no folder-picker screen. It installs to `%LocalAppData%\FireDeptAttendance` (usually `C:\Users\<you>\AppData\Local\FireDeptAttendance`). The program files are in its `current` sub-folder, and updates replace that sub-folder.
+- **Custom folder:** run the installer from a Command Prompt with `--installto`:
+
+  ```
+  FireDeptAttendance-win-Setup.exe --installto "D:\Apps\FireDeptAttendance"
+  ```
+
+  Use an **empty, dedicated folder**. If the folder already has files in it, the installer asks before it **replaces the folder's contents**. Add `--silent` to skip the installer's UI.
+- **Portable:** `FireDeptAttendance-win-Portable.zip` runs without installing. Extract it to any folder you can write to (for example a USB stick or `D:\Apps`) and run `FireDeptAttendance.exe`. Velopack documents the portable package as able to update itself, but this has not been tested with this app.
+- **Settings → Data & Storage → Install location** shows where the running copy lives and has an **Open folder** button.
+
+The install folder holds **only program files**. Your database and settings are kept separately in the data folder (see below), so reinstalling, updating, or moving the install folder never touches your records.
 
 ## How updates work
 
@@ -25,32 +38,60 @@ A portable zip (`FireDeptAttendance-win-Portable.zip`) is also attached to each 
 
 ## Where your data is stored
 
-All user data lives in:
+By default, all user data lives in:
 
 ```
 %APPDATA%\FireDeptAttendance\
     fire_dept.db      ← members, events, attendance, minutes (SQLite)
-    settings.json     ← theme, font size, rates, default locations, minutes header/footer
+    settings.json     ← theme, font size, rates, folder preferences, minutes header/footer
     signature.png     ← optional signature image used in minutes (any image extension)
+    backups\          ← automatic copies made before every import / restore
 ```
 
-(Usually `C:\Users\<you>\AppData\Roaming\FireDeptAttendance`. To open it, paste `%APPDATA%\FireDeptAttendance` into Explorer's address bar.)
+(Usually `C:\Users\<you>\AppData\Roaming\FireDeptAttendance`.)
 
-**Backups:** close the app, then copy that folder.
+### Data & Storage window
 
-## Migrating your existing database (from the Python version)
+Open it with the **💾 Data & Storage** button on the status bar, from **Settings → Data & Storage…**, or from the **Excel Export** tab → **Data** section. It has four sections:
 
-The new app opens the existing `fire_dept.db` and `settings.json` **as-is**, with no conversion. Older databases get any missing columns added automatically, the same way the Python app did. There are three ways to bring your data over:
+- **Data folder:** shows the current folder and how many members and events it contains.
+  - **Change…** picks a new folder, for example a OneDrive or network folder, or another drive. You then choose one of:
+    - **Move** your data there (the originals are deleted after a successful copy).
+    - **Copy** it there (the originals are kept).
+    - **Use the data already in that folder** (nothing is copied).
 
-1. **Automatic (first run):** if `%APPDATA%\FireDeptAttendance\fire_dept.db` does not exist yet, the app looks for `fire_dept.db` in two places:
-   - **next to the program's .exe**
-   - **in that folder's parent folder**
+    If the target folder already holds a database, you can't overwrite it by accident. Invalid or read-only folders are rejected with an explanation.
+  - **Open folder** opens the folder in Explorer.
+  - **Reset to default** switches back to `%APPDATA%\FireDeptAttendance`.
+- **Import previous data:** import from a database file, re-import from the last location, or restore the previous backup (see below).
+- **Default export folders:** where the Excel export, the batch minutes export, and single minutes documents are saved. Each one has **Browse…**, **Use Documents**, and **Open folder** buttons. If a folder is not set or no longer exists, the Documents folder is used. The folder you last saved to is remembered automatically.
+- **Install location:** the program's version and folder (see *Install location* above).
 
-   If found, it copies `fire_dept.db`, `settings.json`, and any `signature.*` file into the data folder.
-2. **Import prompt:** if no database is found at all, the app asks whether to import one. Click **Yes** and browse to your old `fire_dept.db`. Its `settings.json` and `signature.*` are copied from the same folder.
-3. **Manual:** close the app and copy `fire_dept.db`, `settings.json`, and `signature.*` into `%APPDATA%\FireDeptAttendance\`.
+How the chosen data folder is remembered: a small pointer file, `%APPDATA%\FireDeptAttendance\location.json`, stores the custom folder. Delete that file to go back to the default. If the environment variable `FIREDEPT_DATA_DIR` is set, it overrides everything, and the folder setting is locked in the app. If a custom folder becomes unavailable (for example, an unplugged drive), the app offers to start with the default folder instead.
 
-Existing files in the data folder are **never overwritten** by the automatic migration or by the import. Your original files are only copied, never moved or modified.
+**Manual backups:** close the app, then copy the data folder.
+
+## Importing your previous data (from the Python version or another PC)
+
+The Python app kept `fire_dept.db` (plus `settings.json` and `signature.*`) **in the same folder as `app.py`** or, for the packaged build, **next to its `.exe`**. Find that file first. Its size should be more than a few KB if it holds records.
+
+1. Open **Data & Storage → Import from database…**, or click **📥 Import from database…** on the Excel Export tab.
+2. Pick the old `fire_dept.db`. The app checks that it really is an attendance database and shows a preview: the number of members (active/total), events (meetings/calls), quarters, attendance marks, and the date range.
+   - If the file contains **no members and no events**, you get an explicit warning. That file is probably not the one you want.
+3. Confirm the import. You'll also be asked whether to bring over that folder's `settings.json` and signature image. Your folder preferences are always kept.
+4. Before anything is replaced, the current database is saved to `backups\fire_dept_YYYYMMDD_HHMMSS_before_import.db`. The file is copied with SQLite's backup API, which correctly picks up `-wal`/`-journal` files, and older schemas are upgraded automatically. **The source file itself is never modified.**
+
+Other options:
+
+- **Re-import from last location:** the last imported file is remembered and can be re-imported with one click.
+- **Restore previous backup:** puts back the most recent file from `backups\`. The current data is backed up first, so a restore can be undone too.
+- **First run:** if the data folder has no database, or only an empty one, the app first searches common locations for an old `fire_dept.db`:
+  - the program folder and its parent;
+  - `Documents` / `Desktop` sub-folders named like `FireDeptAttendance` or `fire_dept_attendance` (and their `dist` sub-folders);
+  - `Downloads\FireDeptAttendance` and `Downloads\fire_dept_attendance`.
+
+  Empty databases are skipped. If nothing is found, the app **asks** you to locate the file, start with an empty database, or decide later. It no longer starts empty silently.
+- **Manual:** close the app and copy `fire_dept.db`, `settings.json`, and `signature.*` into the data folder.
 
 ## Publishing a new version (maintainers)
 
