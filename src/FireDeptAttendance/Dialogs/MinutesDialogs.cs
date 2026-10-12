@@ -28,6 +28,10 @@ internal static class DialogLayout
         bar.Children.Add(b);
     }
 
+    /// <summary>Preferred dialog height, capped to the screen's work area so the buttons stay visible.</summary>
+    public static double FitHeight(double preferred) =>
+        Math.Max(360, Math.Min(preferred, SystemParameters.WorkArea.Height - 40));
+
     public static TextBlock Bold(string text, bool wrap = false)
     {
         var t = Ui.Text(text, Lbl.Normal, wrap);
@@ -46,8 +50,8 @@ public sealed class MinutesTemplateDialog : Window
 
     public MinutesTemplateDialog(Window? owner)
     {
-        Ui.SetupDialog(this, "Minutes Header / Footer", owner, 640, 780);
-        MinWidth = 600; MinHeight = 740;
+        Ui.SetupDialog(this, "Minutes Header / Footer", owner, 640, DialogLayout.FitHeight(780));
+        MinWidth = 560; MinHeight = Math.Min(560, Height);
         var (root, btns) = DialogLayout.Make();
         DialogLayout.Add(btns, Ui.Button("Restore Defaults", RestoreDefaults, "GhostButton"), Dock.Left);
         DialogLayout.Add(btns, Ui.Button("Save", Save, "AccentButton"), Dock.Right);
@@ -68,13 +72,13 @@ public sealed class MinutesTemplateDialog : Window
         Row(Ui.M(ph, 0, 0, 0, 12));
 
         Row(DialogLayout.Bold("Header (appears above the minutes):"));
-        _header = new RichTextEditor(10, 6, spell: true);
+        _header = new RichTextEditor(10, 6, spell: true, minLines: 3);
         Row(Ui.M(_header, 0, 3, 0, 12), true);
         _header.SetContent(_s.MinutesHeader);
 
         Row(DialogLayout.Bold("Footer (appears below the minutes) — click “Insert signature”, then drag it onto the signature line:", true));
         var sig = _s.SignaturePath();
-        _footer = new RichTextEditor(10, 6, allowSignature: true, signaturePath: sig.Length > 0 ? sig : null, spell: true);
+        _footer = new RichTextEditor(10, 6, allowSignature: true, signaturePath: sig.Length > 0 ? sig : null, spell: true, minLines: 3);
         Row(Ui.M(_footer, 0, 3, 0, 12), true);
         _footer.SetContent(_s.MinutesFooter);
 
@@ -164,8 +168,8 @@ public sealed class MinutesDialog : Window
 
     public MinutesDialog(Window? owner, Event ev)
     {
-        Ui.SetupDialog(this, "Meeting Minutes", owner, 700, 720);
-        MinWidth = 600; MinHeight = 560;
+        Ui.SetupDialog(this, "Meeting Minutes", owner, 760, DialogLayout.FitHeight(800));
+        MinWidth = 560; MinHeight = Math.Min(480, Height);
         _eventId = ev.Id;
         _attendees = _db.CountEventAttendees(ev.Id);
         _dateIso = ev.EventDate ?? "";
@@ -199,8 +203,9 @@ public sealed class MinutesDialog : Window
             Row(Ui.M(hp, 0, 2, 0, 8));
         }
 
-        Row(DialogLayout.Bold("Minutes:  (select text, then B / I / U — or Ctrl+B / Ctrl+I / Ctrl+U)"));
-        _editor = new RichTextEditor(11, 14, spell: true);
+        Row(DialogLayout.Bold("Minutes:  (select text, then B / I / U — or Ctrl+B / Ctrl+I / Ctrl+U; Tab inserts a tab, Shift+Tab removes one)", true));
+        // The body takes all remaining height (star row) and scrolls inside it.
+        _editor = new RichTextEditor(11, 14, spell: true, minLines: 4);
         _editor.SetContent(_db.GetEventMinutes(_eventId));
         Row(Ui.M(_editor, 0, 3, 0, 8), true);
 

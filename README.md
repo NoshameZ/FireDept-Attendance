@@ -93,6 +93,22 @@ Other options:
   Empty databases are skipped. If nothing is found, the app **asks** you to locate the file, start with an empty database, or decide later. It no longer starts empty silently.
 - **Manual:** close the app and copy `fire_dept.db`, `settings.json`, and `signature.*` into the data folder.
 
+## Changelog
+
+### v2.0.2
+- **Meeting minutes editor:**
+  - **Tab** now inserts a tab character in the minutes body, replacing any selected text, instead of jumping to the next control.
+  - **Shift+Tab** removes one leading tab from the selected line(s).
+  - **Ctrl+Tab** / **Ctrl+Shift+Tab** move focus out of the editor.
+  - Tabs are saved with the minutes and appear as real tabs in Word (.docx) exports, both single and batch, and in .txt exports.
+- The minutes body now fills the dialog and scrolls (scrollbar and mouse wheel), so long minutes are fully visible. Both minutes dialogs fit the screen height, can be resized, and keep their buttons visible.
+
+### v2.0.1
+- Import from database with preview, automatic backup and restore; configurable data folder; default export folders; install-location info.
+
+### v2.0.0
+- Native Windows (C# / WPF) rewrite with automatic updates.
+
 ## Publishing a new version (maintainers)
 
 Releases are built entirely by GitHub Actions (`.github/workflows/release.yml`):

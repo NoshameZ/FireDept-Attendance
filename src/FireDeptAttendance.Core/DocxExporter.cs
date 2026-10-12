@@ -112,6 +112,19 @@ public static class DocxExporter
         }
     }
 
+    /// <summary>A run whose tab characters become &lt;w:tab/&gt; elements (Word ignores raw tabs inside &lt;w:t&gt;).</summary>
+    internal static Run MakeRun(RunProperties rp, string text)
+    {
+        var r = new Run(rp);
+        var parts = text.Replace("\r", "").Split('\t');
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (i > 0) r.Append(new TabChar());
+            if (parts[i].Length > 0) r.Append(new Text(parts[i]) { Space = SpaceProcessingModeValues.Preserve });
+        }
+        return r;
+    }
+
     private static bool AddBlock(Ctx ctx, Body body, List<List<RichRun>> paras, int basePt)
     {
         bool placed = false;
@@ -132,7 +145,7 @@ public static class DocxExporter
                 if (run.Italic) rp.Append(new Italic());
                 if (run.Underline) rp.Append(new Underline { Val = UnderlineValues.Single });
                 rp.Append(new FontSize { Val = (basePt * 2).ToString() });
-                p.Append(new Run(rp, new Text(run.Text) { Space = SpaceProcessingModeValues.Preserve }));
+                p.Append(MakeRun(rp, run.Text));
             }
             body.Append(p);
         }

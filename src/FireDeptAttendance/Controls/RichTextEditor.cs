@@ -30,7 +30,7 @@ public sealed class RichTextEditor : DockPanel
     private InlineUIContainer? _dragging;
 
     public RichTextEditor(double basePt, int heightLines, bool readOnly = false, bool allowSignature = false,
-                          string? signaturePath = null, bool spell = true)
+                          string? signaturePath = null, bool spell = true, int? minLines = null)
     {
         _readOnly = readOnly;
         _allowSignature = allowSignature;
@@ -40,7 +40,7 @@ public sealed class RichTextEditor : DockPanel
         Box = new RichTextBox
         {
             AcceptsReturn = true,
-            AcceptsTab = false,
+            AcceptsTab = !readOnly,
             IsReadOnly = readOnly,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             FontSize = basePt * 96.0 / 72.0,
@@ -50,8 +50,11 @@ public sealed class RichTextEditor : DockPanel
         Box.Document.PagePadding = new Thickness(2);
         var lineH = Box.FontSize * 1.45;
         Box.Height = double.NaN;
-        Box.MinHeight = heightLines * lineH + 12;
+        // Editable boxes fill the space their parent gives them and scroll inside it; the minimum is kept
+        // small so the box never grows past the window (which used to clip the bottom and hide the scrollbar).
+        Box.MinHeight = (minLines ?? heightLines) * lineH + 12;
         if (readOnly) Box.MaxHeight = heightLines * lineH + 12;
+        else Box.PreviewKeyDown += OnBoxPreviewKeyDown;
 
         if (!readOnly)
         {
@@ -97,6 +100,70 @@ public sealed class RichTextEditor : DockPanel
         style(b);
         b.Click += (_, _) => { cmd.Execute(null, Box); Box.Focus(); };
         return b;
+    }
+
+    // ------------------------------------------------------------------ tab keys
+    /// <summary>
+    /// Tab inserts a real tab character (replacing any selection) instead of WPF's default of changing
+    /// paragraph indentation, which the saved format cannot store. Shift+Tab removes one leading tab from
+    /// each selected paragraph. Ctrl+Tab / Ctrl+Shift+Tab move keyboard focus out of the editor.
+    /// </summary>
+    private void OnBoxPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Tab || Box.IsReadOnly) return;
+        var mods = Keyboard.Modifiers;
+        if (mods.HasFlag(ModifierKeys.Control))
+        {
+            Box.MoveFocus(new TraversalRequest(mods.HasFlag(ModifierKeys.Shift)
+                ? FocusNavigationDirection.Previous : FocusNavigationDirection.Next));
+        }
+        else if (mods == ModifierKeys.Shift) Outdent();
+        else if (mods == ModifierKeys.None) InsertTab();
+        else return;
+        e.Handled = true;
+    }
+
+    private void InsertTab()
+    {
+        Box.BeginChange();
+        try
+        {
+            Box.Selection.Text = "\t";   // replaces the selection, keeps the formatting at the caret
+            Box.Selection.Select(Box.Selection.End, Box.Selection.End);
+        }
+        finally { Box.EndChange(); }
+    }
+
+    private void Outdent()
+    {
+        var first = Box.Selection.Start.Paragraph;
+        var last = Box.Selection.End.Paragraph;
+        if (first == null) return;
+        Box.BeginChange();
+        try
+        {
+            for (Block? b = first; b != null; b = b.NextBlock)
+            {
+                if (b is Paragraph p) RemoveLeadingTab(p);
+                if (b == last || last == null) break;
+            }
+        }
+        finally { Box.EndChange(); }
+    }
+
+    private static void RemoveLeadingTab(Paragraph p)
+    {
+        var tp = p.ContentStart;
+        while (tp != null && tp.CompareTo(p.ContentEnd) < 0 && tp.GetPointerContext(LogicalDirection.Forward) != TextPointerContext.Text)
+        {
+            // Stop at a non-text element (e.g. the signature image): it is "content" before any tab.
+            if (tp.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.EmbeddedElement) return;
+            tp = tp.GetNextContextPosition(LogicalDirection.Forward);
+        }
+        if (tp == null || tp.CompareTo(p.ContentEnd) >= 0) return;
+        if (!tp.GetTextInRun(LogicalDirection.Forward).StartsWith('\t')) return;
+        var end = tp.GetPositionAtOffset(1);
+        if (end != null) new TextRange(tp, end).Text = "";
     }
 
     // ------------------------------------------------------------------ spell check

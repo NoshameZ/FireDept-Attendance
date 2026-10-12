@@ -169,6 +169,56 @@ var summary = DocxExporter.ExportQuarterMinutes(db, q1, work, s.MinutesHeader, s
 Check(summary.TotalMeetings == 6 && summary.Exported == 6 && summary.Blank == 5, $"quarter minutes export ({summary.Exported}/{summary.TotalMeetings}, blank {summary.Blank})");
 Check(Directory.GetFiles(summary.Folder, "*.docx").Length == 6, "6 docx files on disk");
 
+// ---- tab characters in minutes ---------------------------------------------------
+Console.WriteLine("[Tabs]");
+var tabParas = new List<List<RichRun>>
+{
+    new() { new RichRun { Text = "\tIndented first line" } },
+    new() { new RichRun { Text = "Item\tValue", Bold = true }, new RichRun { Text = "\t\tend", Italic = true } },
+    new(),
+    new() { new RichRun { Text = "\t" } },
+};
+var tabEnc = RichTextModel.Encode(tabParas);
+var tabBack = RichTextModel.Parse(tabEnc);
+Check(tabBack.Count == 4 && tabBack[0][0].Text == "\tIndented first line" && tabBack[1][0].Text == "Item\tValue" &&
+      tabBack[1][0].Bold && tabBack[1][1].Text == "\t\tend" && tabBack[1][1].Italic && tabBack[3][0].Text == "\t",
+    "tabs round-trip through rich-v1 save/load");
+Check(RichTextModel.Parse("{\"format\": \"rich-v1\", \"paras\": [[{\"t\": \"\\tA\\tB\", \"b\": 0, \"i\": 0, \"u\": 0}]]}")[0][0].Text == "\tA\tB",
+    "Python-written escaped tabs load");
+Check(RichTextModel.Parse("line1\n\tline2")[1][0].Text == "\tline2", "tabs kept in legacy plain-text minutes");
+Check(RichTextModel.ToPlain(tabBack) == "\tIndented first line\nItem\tValue\t\tend\n\n\t", "tabs kept in .txt export");
+Check(!RichTextModel.IsEmpty(tabEnc) && RichTextModel.IsEmpty(RichTextModel.Encode(new() { new() { new RichRun { Text = "\t\t" } } })),
+    "tab-only minutes count as empty");
+var subTab = RichTextModel.Substitute(RichTextModel.Parse("{date}\t{location}"), RichTextModel.Placeholders(3, "2025-02-03", "Station 1"));
+Check(subTab[0][0].Text == "02/03/2025\tStation 1", "placeholders substituted around tabs");
+var tabDocx = Path.Combine(work, "tabs.docx");
+DocxExporter.ExportMinutes(tabDocx, new() { new() }, tabParas, new() { new() });
+using (var wd = WordprocessingDocument.Open(tabDocx, false))
+{
+    var b = wd.MainDocumentPart!.Document.Body!;
+    var tabsInDoc = b.Descendants<DocumentFormat.OpenXml.Wordprocessing.TabChar>().Count();
+    var texts = b.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>().Select(t => t.Text).ToList();
+    Check(tabsInDoc == 5, $"docx has one <w:tab/> per tab character ({tabsInDoc})");
+    Check(texts.All(t => !t.Contains('\t')) && texts.Contains("Indented first line") && texts.Contains("Item") &&
+          texts.Contains("Value") && texts.Contains("end"), "docx text split around tabs, no raw tabs");
+    var boldRun = b.Descendants<DocumentFormat.OpenXml.Wordprocessing.Run>()
+        .First(r => r.Descendants<DocumentFormat.OpenXml.Wordprocessing.Text>().Any(t => t.Text == "Item"));
+    Check(boldRun.RunProperties?.Bold != null && boldRun.Elements<DocumentFormat.OpenXml.Wordprocessing.TabChar>().Count() == 1,
+        "tab stays inside its formatted run");
+}
+var tabEvent = meet;
+var savedMinutes = db.GetEventMinutes(tabEvent);
+db.SaveEventMinutes(tabEvent, tabEnc);
+Check(db.GetEventMinutes(tabEvent) == tabEnc, "tabbed minutes saved to database unchanged");
+var tabSummary = DocxExporter.ExportQuarterMinutes(db, q1, Path.Combine(work, "tabbatch"), s.MinutesHeader, s.MinutesFooter, null);
+var tabFile = Directory.GetFiles(tabSummary.Folder, "*.docx").Select(f =>
+{
+    using var wd = WordprocessingDocument.Open(f, false);
+    return wd.MainDocumentPart!.Document.Body!.Descendants<DocumentFormat.OpenXml.Wordprocessing.TabChar>().Count();
+}).Max();
+Check(tabFile >= 5, "batch minutes export writes tabs");
+db.SaveEventMinutes(tabEvent, savedMinutes);
+
 // delete cascade
 db.DeleteMember(m2);
 Check(db.GetEventAttendance(call1).Count == 1, "delete member cascades attendance");
