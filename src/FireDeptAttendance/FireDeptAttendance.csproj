@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>FireDeptAttendance</AssemblyName>
+    <RootNamespace>FireDeptAttendance</RootNamespace>
+    <Product>Fire Department Attendance Tracker</Product>
+    <Company>Fire Department</Company>
+    <!-- Overridden by CI from the git tag:  dotnet publish -p:Version=2.0.1 -->
+    <Version>2.0.0</Version>
+    <!-- Overridden by CI with https://github.com/<owner>/<repo> -->
+    <UpdateRepoUrl Condition="'$(UpdateRepoUrl)' == ''">https://github.com/NoshameZ/FireDept-Attendance</UpdateRepoUrl>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <StartupObject>FireDeptAttendance.Program</StartupObject>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- WinForms is referenced only for ColorDialog; keep its namespaces out of implicit usings. -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyMetadata Include="UpdateRepoUrl" Value="$(UpdateRepoUrl)" />
+  </ItemGroup>
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+    <Resource Include="app.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Velopack" Version="1.2.161" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FireDeptAttendance.Core\FireDeptAttendance.Core.csproj" />
+  </ItemGroup>
+</Project>
