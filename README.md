@@ -95,6 +95,9 @@ Other options:
 
 ## Changelog
 
+### v2.0.4
+- Reduced top page margin to 0.5" so the minutes header starts higher (editor + Word export). Side and bottom margins stay at 1".
+
 ### v2.0.3
 - **Word-like page view for meeting minutes.** You type the minutes on a white US-Letter page that matches the Word export: 8.5 × 11 in, 1 in margins, Calibri 11 pt, single spacing, no gaps between paragraphs, signature 2 in wide.
   - The header and footer from Settings appear above and below the minutes, in export order, with placeholders filled in and the signature shown. Dashed separators with **Header / Minutes / Footer** tags mark each area.

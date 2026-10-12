@@ -34,9 +34,10 @@ public sealed class PageEditor : DockPanel
     private const double Dip = 96.0;
     public static readonly double PageWidth = MinutesPageLayout.PageWidthInches * Dip;     // 816
     public static readonly double PageHeight = MinutesPageLayout.PageHeightInches * Dip;   // 1056
-    public static readonly double PageMargin = MinutesPageLayout.MarginInches * Dip;       // 96
+    public static readonly double PageMargin = MinutesPageLayout.MarginInches * Dip;       // 96 (left, right, bottom)
+    public static readonly double PageTopMargin = MinutesPageLayout.TopMarginInches * Dip; // 48
     public static readonly double ContentWidth = MinutesPageLayout.ContentWidthInches * Dip;   // 624
-    public static readonly double ContentHeight = MinutesPageLayout.ContentHeightInches * Dip; // 864
+    public static readonly double ContentHeight = MinutesPageLayout.ContentHeightInches * Dip; // 912
     public static readonly double FontPx = MinutesPageLayout.BasePt * Dip / 72.0;
     public static readonly double SignatureWidthPx = MinutesPageLayout.SignatureWidthInches * Dip;
     private const double DeskGap = 24;
@@ -130,7 +131,7 @@ public sealed class PageEditor : DockPanel
         _sheet = new Border
         {
             Background = Brushes.White, Width = PageWidth, Height = PageHeight,
-            Padding = new Thickness(PageMargin), Child = pageGrid, Cursor = Cursors.IBeam,
+            Padding = new Thickness(PageMargin, PageTopMargin, PageMargin, PageMargin), Child = pageGrid, Cursor = Cursors.IBeam,
         };
         TextOptions.SetTextFormattingMode(_sheet, TextFormattingMode.Ideal);   // print-like glyph widths
         _sheet.MouseLeftButtonDown += OnSheetClick;
@@ -412,7 +413,7 @@ public sealed class PageEditor : DockPanel
     {
         var h = _content.ActualHeight;
         var pages = Math.Max(1, (int)Math.Ceiling((h - 0.5) / ContentHeight));
-        var sheetH = pages * ContentHeight + 2 * PageMargin;
+        var sheetH = pages * ContentHeight + PageTopMargin + PageMargin;
         _sheet.Height = _shadow.Height = sheetH;
         if (pages == PageCount && _breaks.Children.Count == (pages - 1) * 2) return;
         PageCount = pages;

@@ -210,7 +210,9 @@ using (var wd = WordprocessingDocument.Open(tabDocx, false))
 Console.WriteLine("[Page layout]");
 Check(MinutesPageLayout.PageWidthInches == 8.5 && MinutesPageLayout.PageHeightInches == 11 &&
       MinutesPageLayout.MarginInches == 1 && MinutesPageLayout.ContentWidthInches == 6.5 &&
-      MinutesPageLayout.ContentHeightInches == 9, "layout constants: Letter, 1in margins, 6.5x9in text area");
+      MinutesPageLayout.TopMarginInches == 0.5 && MinutesPageLayout.ContentHeightInches == 9.5 &&
+      MinutesPageLayout.HeaderDistanceTwips <= MinutesPageLayout.TopMarginTwips,
+    "layout constants: Letter, 0.5in top / 1in side+bottom margins, 6.5x9.5in text area");
 void CheckLayout(string file, string what)
 {
     using var wd = WordprocessingDocument.Open(file, false);
@@ -220,7 +222,9 @@ void CheckLayout(string file, string what)
     var mar = sect?.GetFirstChild<DocumentFormat.OpenXml.Wordprocessing.PageMargin>();
     Check(size != null && size.Width?.Value == MinutesPageLayout.PageWidthTwips && size.Height?.Value == MinutesPageLayout.PageHeightTwips,
         $"{what}: page size matches layout");
-    Check(mar != null && mar.Top?.Value == MinutesPageLayout.MarginTwips && mar.Bottom?.Value == MinutesPageLayout.MarginTwips &&
+    Check(mar != null && mar.Top?.Value == 720 && mar.Top?.Value == MinutesPageLayout.TopMarginTwips,
+        $"{what}: top margin is 0.5in (720 twips)");
+    Check(mar != null && mar.Bottom?.Value == MinutesPageLayout.MarginTwips &&
           mar.Left?.Value == MinutesPageLayout.MarginTwips && mar.Right?.Value == MinutesPageLayout.MarginTwips,
         $"{what}: margins match layout");
     var defaults = main.StyleDefinitionsPart!.Styles!.DocDefaults!;

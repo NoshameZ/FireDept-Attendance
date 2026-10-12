@@ -27,8 +27,9 @@ public static class MinutesPageLayout
     public const int TwipsPerInch = 1440;
     public const int PageWidthTwips = 12240;    // 8.5in (US Letter)
     public const int PageHeightTwips = 15840;   // 11in
-    public const int MarginTwips = 1440;        // 1in on all four sides
-    public const int HeaderDistanceTwips = 720;
+    public const int MarginTwips = 1440;        // 1in on the left, right and bottom
+    public const int TopMarginTwips = 720;      // 0.5in so the minutes header starts near the top
+    public const int HeaderDistanceTwips = 360; // must not exceed the top margin
     public const int FooterDistanceTwips = 720;
     public const string FontName = "Calibri";
     public const int BasePt = 11;
@@ -40,7 +41,8 @@ public static class MinutesPageLayout
     public static double PageHeightInches => PageHeightTwips / (double)TwipsPerInch;
     public static double MarginInches => MarginTwips / (double)TwipsPerInch;
     public static double ContentWidthInches => PageWidthInches - 2 * MarginInches;
-    public static double ContentHeightInches => PageHeightInches - 2 * MarginInches;
+    public static double TopMarginInches => TopMarginTwips / (double)TwipsPerInch;
+    public static double ContentHeightInches => PageHeightInches - TopMarginInches - MarginInches;
 }
 
 /// <summary>Meeting-minutes export to Word (.docx) — port of <c>docx_export.py</c>.</summary>
@@ -74,7 +76,7 @@ public static class DocxExporter
             new PageSize { Width = MinutesPageLayout.PageWidthTwips, Height = MinutesPageLayout.PageHeightTwips },
             new PageMargin
             {
-                Top = m, Right = m, Bottom = m, Left = m, Gutter = 0,
+                Top = MinutesPageLayout.TopMarginTwips, Right = m, Bottom = m, Left = m, Gutter = 0,
                 Header = MinutesPageLayout.HeaderDistanceTwips, Footer = MinutesPageLayout.FooterDistanceTwips,
             }));
         main.Document.Save();
