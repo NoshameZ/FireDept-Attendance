@@ -95,6 +95,9 @@ Other options:
 
 ## Changelog
 
+### v2.0.5
+- Excel export: the row under each date on the In-Town / Out-of-Town Calls sheets now shows the call type (e.g. "Smoke Alarm", "Structure Fire") instead of "Call (in-town)". Calls with no type recorded fall back to "Call (In-Town)" / "Call (Out-of-Town)". Meetings, sheets, totals and weighting are unchanged.
+
 ### v2.0.4
 - Reduced top page margin to 0.5" so the minutes header starts higher (editor + Word export). Side and bottom margins stay at 1".
 

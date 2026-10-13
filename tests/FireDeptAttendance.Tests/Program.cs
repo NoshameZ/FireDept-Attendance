@@ -150,6 +150,36 @@ using (var wb = new XLWorkbook(xlsx))
     Check(names.Count >= 2, "workbook has summary + detail sheets");
     Check(names.Any(n => n.Contains("Roster", StringComparison.OrdinalIgnoreCase)), "roster sheet included");
 }
+Console.WriteLine("[Excel call-type header]");
+Check(ExcelExporter.EventHeaderLabel(new Event { EventType = "call", Title = " Smoke Alarm ", CallCategory = "in_town" }) == "Smoke Alarm",
+      "call header shows call type");
+Check(ExcelExporter.EventHeaderLabel(new Event { EventType = "call", Title = "Structure Fire", CallCategory = "out_of_town", CallMultiplier = 2 }) == "Structure Fire  x2",
+      "call header keeps multiplier suffix");
+Check(ExcelExporter.EventHeaderLabel(new Event { EventType = "call", Title = "", CallCategory = "in_town" }) == "Call (In-Town)",
+      "untyped in-town call falls back");
+Check(ExcelExporter.EventHeaderLabel(new Event { EventType = "call", Title = "  ", CallCategory = "out_of_town", CallMultiplier = 3 }) == "Call (Out-of-Town)  x3",
+      "untyped out-of-town call falls back");
+Check(ExcelExporter.EventHeaderLabel(new Event { EventType = "meeting", Title = "Whatever" }) == "Meeting", "meeting header unchanged");
+{
+    var tdb = Path.Combine(work, "calltype.db");
+    using (var cdb = new Database(tdb))
+    {
+        var tq = cdb.GetOrCreateQuarter(2025, 1);
+        cdb.AddEvent("call", "2025-02-11", "Main", "Smoke Alarm", "in_town", 1);
+        cdb.AddEvent("call", "2025-02-12", "Elm", "", "in_town", 1);
+        cdb.AddEvent("call", "2025-02-13", "Hwy 9", "Mutual Aid - Structure Fire Second Alarm", "out_of_town", 2);
+        var cx = Path.Combine(work, "calltype.xlsx");
+        ExcelExporter.ExportQuarterWorkbook(cdb, cx, new List<long> { tq }, false, true);
+        using var cwb = new XLWorkbook(cx);
+        var inT = cwb.Worksheets.First(w => w.Name.Contains("In-Town"));
+        var outT = cwb.Worksheets.First(w => w.Name.Contains("Out-of-Town"));
+        var inRow = inT.Row(4).CellsUsed().Select(c => c.GetString()).ToList();
+        var outRow = outT.Row(4).CellsUsed().Select(c => c.GetString()).ToList();
+        Check(inRow.Contains("Smoke Alarm") && inRow.Contains("Call (In-Town)"), "in-town sheet row 4: " + string.Join(" | ", inRow));
+        Check(outRow.Contains("Mutual Aid - Structure Fire Second Alarm  x2"), "out-of-town sheet row 4: " + string.Join(" | ", outRow));
+        Check(inT.Cell(4, 2).Style.Alignment.WrapText && outT.Row(4).Height > 16, "long call types wrap with taller row");
+    }
+}
 var xlsxAll = Path.Combine(work, "all.xlsx");
 ExcelExporter.ExportQuarterWorkbook(db, xlsxAll, null, true, false);
 Check(File.Exists(xlsxAll), "all-quarters export");

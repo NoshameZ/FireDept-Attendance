@@ -180,6 +180,28 @@ public static class ExcelExporter
             BuildOneDetail(wb, db, q, activeOnly, single, label, events.Where(e => Group(e) == key).ToList());
     }
 
+    /// <summary>
+    /// Label shown under each date on the detail sheets. Calls show their call type (stored in
+    /// <see cref="Event.Title"/>, e.g. "Smoke Alarm"); calls without one fall back to
+    /// "Call (In-Town)" / "Call (Out-of-Town)". Meetings show "Meeting". Multiplier suffix " x2"/" x3" kept.
+    /// </summary>
+    public static string EventHeaderLabel(Event ev)
+    {
+        string label;
+        if (ev.IsMeeting) label = "Meeting";
+        else if (ev.IsCall && !string.IsNullOrWhiteSpace(ev.Title)) label = ev.Title.Trim();
+        else
+        {
+            label = ev.IsCall ? "Call" :
+                (ev.EventType.Length > 0 ? char.ToUpper(ev.EventType[0]) + ev.EventType[1..].ToLower() : "");
+            if (!string.IsNullOrEmpty(ev.CallCategory))
+                label += ev.CallCategory == "out_of_town" ? " (Out-of-Town)" :
+                         ev.CallCategory == "in_town" ? " (In-Town)" : $" ({ev.CallCategory.Replace('_', '-')})";
+        }
+        if (ev.IsCall && ev.CallMultiplier > 1) label += $"  x{ev.CallMultiplier}";
+        return label;
+    }
+
     private static int Mult(Event ev) => ev.IsCall ? Math.Max(1, ev.CallMultiplier) : 1;
 
     private static void BuildOneDetail(XLWorkbook wb, Database db, Quarter q, bool activeOnly, bool single,
@@ -209,14 +231,13 @@ public static class ExcelExporter
         th.FirstCell().Value = "Total";
         Style(th, bold: true, color: XLColor.White, fill: HeaderFill);
 
+        int maxTypeLen = 0;
         for (int j = 0; j < n; j++)
         {
             var ev = events[j];
             int col = firstEv + j;
-            var typeLabel = ev.IsMeeting ? "Meeting" : ev.IsCall ? "Call" :
-                (ev.EventType.Length > 0 ? char.ToUpper(ev.EventType[0]) + ev.EventType[1..].ToLower() : "");
-            if (!string.IsNullOrEmpty(ev.CallCategory)) typeLabel += $" ({ev.CallCategory.Replace('_', '-')})";
-            if (ev.IsCall && ev.CallMultiplier > 1) typeLabel += $"  x{ev.CallMultiplier}";
+            var typeLabel = EventHeaderLabel(ev);
+            maxTypeLen = Math.Max(maxTypeLen, typeLabel.Length);
             ws.Cell(hDate, col).Value = DateUtil.IsoToUs(ev.EventDate);
             ws.Cell(hType, col).Value = typeLabel;
             ws.Cell(hLoc, col).Value = string.IsNullOrEmpty(ev.Location) ? "—" : ev.Location;
@@ -280,10 +301,11 @@ public static class ExcelExporter
             Style(note, align: Align.CenterNoWrap);
         }
         ws.Column(1).Width = 28;
-        for (int j = 0; j < n; j++) ws.Column(firstEv + j).Width = 13;
+        for (int j = 0; j < n; j++) ws.Column(firstEv + j).Width = 15;
         ws.Column(totalCol).Width = 14;
         ws.Row(hDate).Height = 16;
-        ws.Row(hType).Height = 16;
+        // Call types wrap inside the cell; grow the row so up to 3 lines stay readable (~14 chars/line at 9pt).
+        ws.Row(hType).Height = 4 + 12 * Math.Clamp((int)Math.Ceiling(maxTypeLen / 14.0), 1, 3);
         ws.Row(hLoc).Height = 28;
         if (members.Count > 0) ws.SheetView.Freeze(dataStart - 1, 1);
     }
